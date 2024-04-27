@@ -164,8 +164,8 @@ class Program:
         submit.click()
         time.sleep(5)
 
-        # confirm = self.driver.find_element(By.CSS_SELECTOR, 'body > main > div > div > div:nth-child(2) > div > div > div > div.footer > a')
-        # confirm.click()
+        confirm = self.driver.find_element(By.CSS_SELECTOR, 'body > main > div > div > div:nth-child(2) > div > div > div > div.footer > a')
+        confirm.click()
 
     def notify(self, date):
         print(f"ВІЛЬНИЙ ТАЛОН {date}")
