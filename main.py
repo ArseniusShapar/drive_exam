@@ -1,124 +1,169 @@
-import datetime
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 
 from fake_useragent import UserAgent
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.select import Select
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium_recaptcha_solver import RecaptchaSolver
 from win10toast import ToastNotifier
 
 import config
 from tools import convert_date, trim_date, total_minutes, tsc_coords
+
+ID = By.ID
+XPATH = By.XPATH
+CSS = By.CSS_SELECTOR
+TAG = By.TAG_NAME
 
 
 class Program:
     hsc_url = 'https://eq.hsc.gov.ua/'
     dates = [convert_date(date) for date in config.DATES]
     coords = tsc_coords(config.TSC)
+    ES_path = str(Path(os.getcwd()) / config.ES)
 
     def __init__(self):
-        useragent = UserAgent()
+        useragent = UserAgent(os='windows')
+
         options = webdriver.ChromeOptions()
-        options.add_argument(f'user-agent={useragent["google chrome"]}')
-        # options.add_argument('--headless')
+        options.add_argument(f'user-agent={useragent.firefox}')
         options.add_argument('window-size=1920x935')
-        self.driver = webdriver.Chrome(options=options)
+        options.add_argument('--disable-infobars')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-notifications')
+        options.add_argument('--disable-popup-blocking')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('log-level=3')
+
+        service = Service('./chromedriver.exe')
+
+        self.driver = webdriver.Chrome(service=service, options=options)
+        # self.driver.set_window_position(-10000, 0)
+
+    def _click(self, elem: tuple[str, str] | WebElement) -> None:
+        element = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(elem)
+        )
+        element.click()
+
+    def _send_keys(self, elem: tuple[str, str] | WebElement, keys: str = '') -> None:
+        element = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(elem)
+        )
+        element.send_keys(keys)
+
+    def _wait_ready_page(self):
+        WebDriverWait(self.driver, 10).until(
+            lambda driver: driver.execute_script('return document.readyState') == 'complete'
+        )
+        time.sleep(2)
 
     def step1(self):
         self.driver.get(self.hsc_url)
 
-        checkbox = self.driver.find_element(By.TAG_NAME, 'input')
-        checkbox.click()
+        checkbox = (TAG, 'input')
+        self._click(checkbox)
 
-        confirm = self.driver.find_element(By.XPATH, '/html/body/main/div/div/div/div/div/div/div[2]/div[2]/a')
-        confirm.click()
-        time.sleep(4)
+        confirm = (CSS, '.btn-hsc-green_s')
+        self._click(confirm)
 
     def step2(self):
-        file_carrier = self.driver.find_element(By.XPATH, '//a[@href="/euid-auth-js"]')
-        file_carrier.click()
-        time.sleep(7)
+        file_carrier = (XPATH, '//a[@href="/euid-auth-js"]')
+        self._click(file_carrier)
 
-        upload = self.driver.find_element(By.ID, 'PKeyFileInput')
-        path = Path(os.getcwd()) / config.ES
-        upload.send_keys(str(path))
+        WebDriverWait(self.driver, 10).until(
+            lambda driver: driver.execute_script('return document.readyState') == 'complete'
+        )
+        time.sleep(1)
+        upload = self.driver.find_element(ID, 'PKeyFileInput')
+        upload.send_keys(self.ES_path)
 
-        password = self.driver.find_element(By.ID, 'PKeyPassword')
-        password.send_keys(config.PASSWORD)
+        password = (ID, 'PKeyPassword')
+        self._send_keys(password, config.PASSWORD)
 
-        confirm = self.driver.find_element(By.ID, 'id-app-login-sign-form-file-key-sign-button')
-        confirm.click()
-        time.sleep(7)
+        confirm = (ID, 'id-app-login-sign-form-file-key-sign-button')
+        self._click(confirm)
 
     def step3(self):
-        confirm = self.driver.find_element(By.ID, 'btnAcceptUserDataAgreement')
-        confirm.click()
-        time.sleep(4)
+        confirm = (ID, 'btnAcceptUserDataAgreement')
+        self._click(confirm)
 
     def step4(self):
-        sign_up = self.driver.find_element(By.XPATH, '/html/body/main/div/div/div[1]/div[2]/div/button[1]')
-        sign_up.click()
-        time.sleep(4)
+        sign_up = (CSS, 'br + button')
+        self._click(sign_up)
 
     def step5(self):
-        practice = self.driver.find_element(By.XPATH, '/html/body/main/div/div/div[2]/div/div/div/div/a[5]')
-        practice.click()
-        time.sleep(4)
+        practice = (CSS, '.buttongroup > a:last-of-type')
+        self._click(practice)
 
     def step6(self):
-        if config.VEHICLE == 'tsc':
-            vehicle = self.driver.find_elements(By.CSS_SELECTOR, "div.buttongroup > button")[0]
-        elif config.VEHICLE == 'school':
-            vehicle = self.driver.find_elements(By.CSS_SELECTOR, "div.buttongroup > button")[1]
-        else:
-            raise ValueError(f'Invalid vehicle: {config.VEHICLE}')
-        vehicle.click()
-        time.sleep(2)
+        idx = 1 if config.VEHICLE == 'tsc' else 3
+        vehicle = (CSS, f'.buttongroup > :nth-child({idx})')
+        self._click(vehicle)
 
-        if config.VEHICLE == 'tsc':
-            css_selector = '#ModalCenterServiceCenter > div > div > div.modal-footer > button:nth-child(2)'
-        elif config.VEHICLE == 'school':
-            css_selector = '#ModalCenter2 > div > div > div.modal-footer > button:nth-child(2)'
-        confirm1 = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-        confirm1.click()
-        time.sleep(2)
+        css_selector = '.modal-footer > button' if config.VEHICLE == 'tsc' else '#ModalCenter2 .modal-footer > button'
+        confirm1 = (CSS, css_selector)
+        self._click(confirm1)
 
-        if config.VEHICLE == 'tsc':
-            css_selector = '#ModalCenterServiceCenter1 > div > div > div.modal-footer > a:nth-child(2)'
-        elif config.VEHICLE == 'school':
-            css_selector = '#ModalCenter4 > div > div > div.modal-footer > button'
-        confirm2 = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-        confirm2.click()
-        time.sleep(2)
+        css_selector = '.modal-footer > a' if config.VEHICLE == 'tsc' else '#ModalCenter4 .modal-footer > button'
+        confirm2 = (CSS, css_selector)
+        self._click(confirm2)
 
         if config.VEHICLE == 'school':
-            css_selector = '#ModalCenter5 > div > div > div.modal-footer > a:nth-child(2)'
-        elif (config.VEHICLE == 'tsc') and (config.TRANSMISSION == 'manual'):
-            css_selector = 'body > main > div > div > div:nth-child(2) > div > div > div > div > a:nth-child(7)'
-        elif (config.VEHICLE == 'tsc') and (config.TRANSMISSION == 'automatic'):
-            css_selector = 'div.buttongroup > a:nth-child(9)'
-        b_category = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-        b_category.click()
-        time.sleep(4)
+            css_selector = '#ModalCenter5 .modal-footer > :nth-child(2)'
+        elif config.VEHICLE == 'tsc' and config.TRANSMISSION == 'manual':
+            css_selector = '.buttongroup > :nth-child(7)'
+        elif config.VEHICLE == 'tsc' and config.TRANSMISSION == 'automatic':
+            css_selector = '.buttongroup > :nth-child(9)'
+        b_category = (CSS, css_selector)
+        self._click(b_category)
 
     def step7(self):
-        elem = self.driver.find_element(By.CSS_SELECTOR, 'div.buttongroup > div > div:nth-child(1) > a')
-        elem.click()
-        time.sleep(5)
+        first_day = (CSS, '.buttongroup a')
+        self._click(first_day)
 
     def launch(self):
         self.step1()
         self.step2()
         self.step3()
+        self._wait_ready_page()
+
+        self.check_and_pass_captcha()
+
+        self.launch_after_captcha()
+
+    def launch_after_captcha(self):
         self.step4()
         self.step5()
         self.step6()
         self.step7()
 
+    def check_captcha(self):
+        elems = self.driver.find_elements(ID, 'captchaform')
+        return len(elems) > 0
+
+    def pass_captcha(self):
+        solver = RecaptchaSolver(driver=self.driver)
+        recaptcha_iframe = self.driver.find_element(By.XPATH, '//iframe[@title="reCAPTCHA"]')
+        solver.click_recaptcha_v2(iframe=recaptcha_iframe)
+        time.sleep(5)
+
+        confirm = self.driver.find_element(CSS, '.btn-warning')
+        confirm.click()
+
+    def check_and_pass_captcha(self):
+        if self.check_captcha():
+            self.pass_captcha()
+
     def find_tsc(self):
-        elems = self.driver.find_elements(By.TAG_NAME, 'img')
+        elems = self.driver.find_elements(TAG, 'img')
         for elem in elems:
             style = elem.get_attribute('style')
             if self.coords in style:
@@ -129,15 +174,19 @@ class Program:
         return src in ('https://eq.hsc.gov.ua/images/hsc_i.png', 'https://eq.hsc.gov.ua/images/hsc_.png')
 
     def check_tickets(self):
-        next_day = self.driver.find_element(By.XPATH, '//div[@onclick="next()"]')
+        next_day = self.driver.find_element(XPATH, '//div[@onclick="next()"]')
         previous_date = ''
         for _ in range(60):
-            date = trim_date(self.driver.find_element(By.ID, 'slider').text)
+            if self.check_captcha():
+                self.pass_captcha()
+                self.launch_after_captcha()
+
+            date = trim_date(self.driver.find_element(ID, 'slider').text)
 
             if date == previous_date:
                 break
 
-            if date in self.dates:
+            if (date in self.dates) or (not self.dates):
                 tsc = self.find_tsc()
                 if self.check_tsc(tsc):
                     self.take_ticket(tsc)
@@ -146,25 +195,25 @@ class Program:
 
             next_day.click()
             previous_date = date
-            time.sleep(2)
+            time.sleep(1)
 
     def take_ticket(self, tsc):
         tsc.click()
         time.sleep(2)
 
-        time_select = Select(self.driver.find_element(By.CSS_SELECTOR, '#id_chtime'))
+        time_select = Select(self.driver.find_element(ID, 'id_chtime'))
         deltas = [abs(total_minutes(config.TIME) - total_minutes(option.text)) for option in time_select.options]
         idx = deltas.index(min(deltas))
         time_select.select_by_index(idx)
 
-        email = self.driver.find_element(By.CSS_SELECTOR, '#email')
+        email = self.driver.find_element(ID, 'email')
         email.send_keys(config.EMAIL)
 
-        submit = self.driver.find_element(By.CSS_SELECTOR, '#submit')
+        submit = self.driver.find_element(ID, 'submit')
         submit.click()
-        time.sleep(5)
+        self._wait_ready_page()
 
-        confirm = self.driver.find_element(By.CSS_SELECTOR, 'body > main > div > div > div:nth-child(2) > div > div > div > div.footer > a')
+        confirm = self.driver.find_element(CSS, '.btn-hsc-green')
         confirm.click()
 
     def notify(self, date):
@@ -183,35 +232,38 @@ class Program:
 
     def refresh(self):
         self.driver.refresh()
-        time.sleep(3)
+        self._wait_ready_page()
 
-    def quit(self):
-        self.driver.close()
-        time.sleep(10)
+    def __del__(self):
+        self.driver.quit()
 
 
-def main(program):
-    print(f'\n\nCURRENT TIME: {datetime.datetime.now()}\n\n')
-    try:
-        program.launch()
-        i = 0
-        while True:
-            print(f'REFRESH #{i}')
-            # time.sleep(10000)
-            program.refresh()
-            program.check_tickets()
-            time.sleep(30)
-            i += 1
-    except KeyboardInterrupt:
-        exit(0)
-    except Exception as e:
-        print('\n' + str(e))
-        print('\n\nEMERGENCY RESTART\n\n')
-        program.quit()
-        time.sleep(120)
-        main(program)
+def launch_listener(program: Program) -> None:
+    print(f'\nCURRENT TIME: {datetime.now()}\n')
+    program.launch()
+    for i in range(10_000):
+        print(f'REFRESH #{i}')
+        program.check_tickets()
+        time.sleep(1)
+        program.refresh()
+        if program.check_captcha():
+            program.pass_captcha()
+            program.launch_after_captcha()
+
+
+def main():
+    while True:
+        try:
+            program = Program()
+            launch_listener(program)
+        except KeyboardInterrupt:
+            exit(0)
+        except Exception as e:
+            print(e)
+            print('\nEMERGENCY RESTART\n')
+        finally:
+            del program
 
 
 if __name__ == '__main__':
-    program = Program()
-    main(program)
+    main()
