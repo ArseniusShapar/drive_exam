@@ -1,14 +1,17 @@
+import time
+from random import uniform
+
+
 def convert_date(date: str) -> str:
-    day, month = date.split('.')
+    day, month, year, _ = date.split()
 
-    monthes = ['Січня', 'Лютого', 'Березня', 'Квітня', 'Травня', 'Червня', 'Липня', 'Серпня', 'Вересня', 'Жовтня',
-               'Листопада', 'Грудня']
-    return f'{day} {monthes[int(month) - 1]}'
+    monthes = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня',
+               'листопада', 'грудня']
+    month_idx = monthes.index(month) + 1
+    if month_idx == 0:
+        raise ValueError('Unknown month')
 
-
-def trim_date(date: str) -> str:
-    s1, s2, s3 = date.split(' ')
-    return s1 + ' ' + s2
+    return f'{day}.{month_idx}'
 
 
 def total_minutes(t: str) -> int:
@@ -16,12 +19,11 @@ def total_minutes(t: str) -> int:
     return 60 * int(hours) + int(minutes)
 
 
-def tsc_coords(tsc: str):
-    coords = {'8049': '(483px, 206px, 0px)',
-              '3246': '(472px, 208px, 0px)',
-              '8041': '(471px, 206px, 0px)',
-              '8042*': '(472px, 203px, 0px)',
-              '3242': '(460px, 250px, 0px)',
-              '3248': '(522px, 232px, 0px)',
-              '1841': '(390px, 217px, 0px)'}
-    return coords[tsc]
+def random_sleep(a: float = 0.5, b: float = 1):
+    time.sleep(uniform(a, b))
+
+
+def type_like_human(element, text):
+    for c in text:
+        element.send_keys(c)
+        random_sleep(0.05, 0.15)

@@ -1,8 +1,9 @@
-ES = ''
-PASSWORD = ''
-EMAIL = ''
-VEHICLE = 'tsc'  # school, tsc
-TRANSMISSION = 'manual'  # manual, automatic
-DATES = ['30.04', '01.05', '05.05']
-TIME = '12:00'
-TSC = '3242'  # 8049, 3246, 8041, 8042*, 3242, 3248, 1841
+ES: str = ''
+PASSWORD: str = ''
+PHONE: str = '+380xxxxxxxxx'
+EMAIL: str = 'test@gmail.com'
+VEHICLE: str = 'school'  # school, tsc
+TRANSMISSION: str = 'automatic'  # manual, automatic
+DATES: list[str] = ['01.11', '02.11', '03.11']
+TIME: str = '12:00'
+TSC: str = '8049'
