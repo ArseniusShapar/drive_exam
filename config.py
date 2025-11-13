@@ -1,4 +1,4 @@
-ES: str = ''
+DC: str = ''
 PASSWORD: str = ''
 PHONE: str = '+380xxxxxxxxx'
 EMAIL: str = 'test@gmail.com'

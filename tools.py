@@ -19,11 +19,11 @@ def total_minutes(t: str) -> int:
     return 60 * int(hours) + int(minutes)
 
 
-def random_sleep(a: float = 0.5, b: float = 1):
+def random_sleep(a: float = 0.3, b: float = 0.5):
     time.sleep(uniform(a, b))
 
 
 def type_like_human(element, text):
     for c in text:
         element.send_keys(c)
-        random_sleep(0.05, 0.15)
+        random_sleep(0.05, 0.1)

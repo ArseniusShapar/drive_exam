@@ -1,5 +1,5 @@
-chromedriver_autoinstaller==0.6.4
 fake_useragent==2.2.0
 selenium_recaptcha_solver==1.9.1
 win10toast==0.9
 selenium==4.35.0
+webdriver-manager=4.0.2

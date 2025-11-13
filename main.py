@@ -1,9 +1,6 @@
-import os
 import time
 from datetime import datetime
-from pathlib import Path
 
-import chromedriver_autoinstaller
 from fake_useragent import UserAgent
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -12,10 +9,11 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium_recaptcha_solver import RecaptchaSolver
+from webdriver_manager.chrome import ChromeDriverManager
 from win10toast import ToastNotifier
 
 import config
-from tools import convert_date, total_minutes, type_like_human, random_sleep
+from tools import convert_date, random_sleep, total_minutes, type_like_human
 
 ID = By.ID
 XPATH = By.XPATH
@@ -25,15 +23,13 @@ TAG = By.TAG_NAME
 
 class Program:
     hsc_url: str = 'https://eq.hsc.gov.ua/'
-    ES_path = str(Path(os.getcwd()) / config.ES)
 
     def __init__(self):
-        chromedriver_autoinstaller.install()
-
-        useragent = UserAgent(os='windows')
+        useragent = UserAgent()
 
         options = webdriver.ChromeOptions()
         options.add_argument(f'user-agent={useragent.chrome}')
+        options.add_argument('--headless')
         options.add_argument('window-size=1920x935')
         options.add_argument('--disable-infobars')
         options.add_argument('--disable-extensions')
@@ -43,26 +39,27 @@ class Program:
         options.add_argument('log-level=3')
         options.add_argument('start-maximized')
 
-        service = Service()
+        service = Service(ChromeDriverManager().install())
 
         self.driver = webdriver.Chrome(service=service, options=options)
-        self.driver.set_window_position(-2000, 0)
-        self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-            'source': '''
+
+        self.driver.execute_cdp_cmd(
+            'Page.addScriptToEvaluateOnNewDocument',
+            {
+                'source': """
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
-        '''
-        })
+        """
+            },
+        )
 
     def __del__(self):
         self.driver.quit()
 
     def _click(self, elem: tuple[str, str] | WebElement) -> None:
         if isinstance(elem, tuple):
-            element = WebDriverWait(self.driver, 3).until(
-                EC.presence_of_element_located(elem)
-            )
+            element = WebDriverWait(self.driver, 3).until(EC.presence_of_element_located(elem))
         else:
             element = elem
         element.click()
@@ -70,24 +67,18 @@ class Program:
 
     def _send_keys(self, elem: tuple[str, str] | WebElement, keys: str = '') -> None:
         if isinstance(elem, tuple):
-            element = WebDriverWait(self.driver, 3).until(
-                EC.presence_of_element_located(elem)
-            )
+            element = WebDriverWait(self.driver, 3).until(EC.presence_of_element_located(elem))
         else:
             element = elem
         type_like_human(element, keys)
         random_sleep()
 
     def _wait_ready_page(self) -> None:
-        WebDriverWait(self.driver, 10).until(
-            lambda driver: driver.execute_script('return document.readyState') == 'complete'
-        )
-        random_sleep(1.5, 2.5)
+        WebDriverWait(self.driver, 10).until(lambda driver: driver.execute_script('return document.readyState') == 'complete')
+        random_sleep(0.5, 1.0)
 
-    def step1(self) -> None:
+    def pass_homepage(self) -> None:
         self.driver.get(self.hsc_url)
-        self.driver.execute_script("window.scrollBy(0, 500);")
-        random_sleep()
 
         checkbox = (TAG, 'input')
         self._click(checkbox)
@@ -95,7 +86,9 @@ class Program:
         confirm = (TAG, 'button')
         self._click(confirm)
 
-    def step2(self) -> None:
+        self._wait_ready_page()
+
+    def pass_diia(self) -> None:
         accept_cookie = (ID, 'CybotCookiebotDialogBodyButtonAccept')
         self._click(accept_cookie)
 
@@ -105,7 +98,7 @@ class Program:
         self._wait_ready_page()
 
         upload = self.driver.find_element(ID, 'PKeyFileInput')
-        upload.send_keys(self.ES_path)
+        upload.send_keys(config.DC)
         random_sleep()
 
         password = (ID, 'PKeyPassword')
@@ -114,19 +107,23 @@ class Program:
         confirm = (ID, 'id-app-login-sign-form-file-key-sign-button')
         self._click(confirm)
 
-    def step3(self) -> None:
+        self._wait_ready_page()
+
         confirm = (ID, 'btnAcceptUserDataAgreement')
         self._click(confirm)
 
-    def step4(self) -> None:
+        self._wait_ready_page()
+
+        # Logically this must be in pass_setting, but we can't move it
         sign_up = (CSS, 'div.MuiGrid-root > a.MuiButtonBase-root')
         self._click(sign_up)
 
-    def step5(self) -> None:
+        self._wait_ready_page()
+
+    def pass_setting(self) -> None:
         practice = (CSS, 'div.MuiGrid-root:nth-child(2) > button.MuiButtonBase-root')
         self._click(practice)
 
-    def step6(self) -> None:
         idx = 1 if config.VEHICLE == 'tsc' else 2
         vehicle = (CSS, f'div.MuiGrid-root:nth-child({idx}) > button')
         self._click(vehicle)
@@ -138,13 +135,16 @@ class Program:
         b_category = (CSS, 'div.MuiGrid-root:nth-child(2) > button')
         self._click(b_category)
 
-    def step7(self) -> None:
+        self._wait_ready_page()
+
+    def search_talons(self) -> None:
         search_field = (ID, '«ri»')
         self._send_keys(search_field, config.TSC)
 
         tsc = self.driver.find_element(CSS, 'div.MuiStack-root:nth-child(2) > button.MuiButtonBase-root')
         if tsc.is_enabled():
             self._click(tsc)
+            self._wait_ready_page()
         else:
             print('NO TALONS')
             return
@@ -153,12 +153,13 @@ class Program:
         dates = self._get_dates(accessible_days)
 
         for elem, date in zip(accessible_days, dates):
-            if date in config.DATES or not config.DATES:
+            if (date in config.DATES) or (not config.DATES):
                 self._click(elem)
-                self.take_ticket(date)
+                self._wait_ready_page()
+                self.take_talon(date)
                 return
 
-        print('NO TALONS ON DESIRED DATES')
+        print(f'NO TALONS ON DESIRED DATES. ACCESIBLE DAYS: {dates}')
 
     def _get_dates(self, accessible_days: list[WebElement]) -> list[str]:
         dates = []
@@ -169,21 +170,14 @@ class Program:
         return dates
 
     def launch(self) -> None:
-        self.step1()
-        self._wait_ready_page()
-        self.step2()
-        self._wait_ready_page()
-        self.step3()
-        self._wait_ready_page()
-        self.step4()
-        self._wait_ready_page()
+        self.pass_homepage()
+        self.pass_diia()
 
-    def take_ticket(self, date: str = ''):
+    def take_talon(self, date: str = '') -> None:
         time_slots = self.driver.find_elements(CSS, 'div.MuiGrid-root > div.MuiGrid-root')
         times = self._get_times(time_slots)
         slot_idx = self._nearest_time(times)
         self._click(time_slots[slot_idx])
-        random_sleep(2, 3)
 
         self.pass_captcha()
 
@@ -191,6 +185,7 @@ class Program:
         self._click(confirm)
 
         self._wait_ready_page()
+
         _, phone, email = self.driver.find_elements(CSS, 'input.MuiInputBase-input')
         self._send_keys(phone, config.PHONE.lstrip('+380'))
         self._send_keys(email, config.EMAIL)
@@ -198,6 +193,8 @@ class Program:
         confirm = (CSS, 'div.MuiStack-root button.MuiButtonBase-root:last-child')
         self._click(confirm)
         self.notify(date)
+
+        exit(0)
 
     def _get_times(self, time_slots: list[WebElement]) -> list[str]:
         times = []
@@ -210,7 +207,7 @@ class Program:
         idx = deltas.index(min(deltas))
         return idx
 
-    def pass_captcha(self):
+    def pass_captcha(self) -> None:
         solver = RecaptchaSolver(driver=self.driver)
         recaptcha_iframe = WebDriverWait(self.driver, 5).until(
             EC.presence_of_element_located((XPATH, '//iframe[@title="reCAPTCHA"]'))
@@ -219,32 +216,27 @@ class Program:
         time.sleep(3)
 
     def check_tickets(self) -> None:
-        self.step5()
-        self.step6()
-        self._wait_ready_page()
-        self.step7()
+        self.pass_setting()
+        self.search_talons()
 
-    def notify(self, date):
-        print(f"ВІЛЬНИЙ ТАЛОН {date}")
+    def notify(self, date) -> None:
+        print(f'\n==== FREE TALON {date} ====\n')
 
         toast = ToastNotifier()
         toast.show_toast(
-            "ВІЛЬНИЙ ТАЛОН",
-            f"ВІЛЬНИЙ ТАЛОН {date}",
+            'FREE TALON',
+            f'FREE TALON {date}',
             duration=10,
             threaded=True,
         )
 
-        time.sleep(120)
-        os.system('pause')
-
-    def refresh(self):
+    def refresh(self) -> None:
         self.driver.refresh()
         self._wait_ready_page()
 
 
 def launch_listener(program: Program) -> None:
-    print(f'\nCURRENT TIME: {datetime.now()}\n')
+    print(f'\nCURRENT TIME: {datetime.now().replace(microsecond=0)}\n')
     program.launch()
     for i in range(10_000):
         program.check_tickets()
@@ -254,7 +246,9 @@ def launch_listener(program: Program) -> None:
 
 
 def main():
-    while True:
+    for i in range(10_000):
+        print(f'ITERATION #{i}')
+
         try:
             program = Program()
             launch_listener(program)
