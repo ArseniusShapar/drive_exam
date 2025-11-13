@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 
@@ -98,7 +99,7 @@ class Program:
         self._wait_ready_page()
 
         upload = self.driver.find_element(ID, 'PKeyFileInput')
-        upload.send_keys(config.DC)
+        upload.send_keys(os.path.abspath(config.DC))
         random_sleep()
 
         password = (ID, 'PKeyPassword')
